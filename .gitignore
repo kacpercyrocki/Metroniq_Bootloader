@@ -1,0 +1,11 @@
+*.o
+*.hex
+*.zip
+Debug/
+Release/
+*.mk
+*.elf
+*.list
+*.map
+*.su
+*.cyclo
