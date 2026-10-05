@@ -55,9 +55,10 @@ const struct
 	char DeviceName[11];
 	uint32_t FWVersion;
 	uint32_t SN;
-}FWInfo  __attribute__((section(".FWInfo"))) = {{'M','e','t','r','o','n','i','Q'},0x00000001, 0x00000001};
+}FWInfo  __attribute__((section(".FWInfo"))) = {{'M','e','t','r','o','n','i','Q'},0x00000002, 0x00000001};
 
 extern uint32_t _main_app_start_address;
+Settings_t DeviceSettings;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,6 +66,8 @@ void SystemClock_Config(void);
 void PeriphCommonClock_Config(void);
 static void MPU_Config(void);
 /* USER CODE BEGIN PFP */
+uint8_t ReadSettings(void);
+static void PerformFWUpdate(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -125,10 +128,22 @@ int main(void)
   MX_OCTOSPI1_Init();
   MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
+  DTR_MemoryCfg();
   EnableMemMapped();
-
-  HAL_Delay(1000);
   LEDDriver_Init();
+  HAL_Delay(1000);
+
+  ReadSettings();
+
+  char DeviceName[8];
+  memcpy(&DeviceName[0], (__IO uint8_t *)(OCTOSPI1_BASE + SECTOR_SIZE + 0x2CC), 8);
+  if(memcmp("MetroniQ", DeviceName, 8) == 0)
+  {
+	  SetStatusLED(WHITE);
+	  PerformFWUpdate();
+	  Memory_ClearCurrentFW();
+  }
+
 
   JumptoApp();
   /* USER CODE END 2 */
@@ -255,6 +270,109 @@ void JumptoApp(void)
     HAL_DeInit();
     // Jump to main application (0x0802 0000)
     pMainApp();
+}
+
+static void PerformFWUpdate(void)
+{
+	FLASH_EraseInitTypeDef erase;
+	uint8_t Buffer[16];
+	uint8_t DeviceInfoMemorySector[16];
+	uint8_t data_to_write[32];
+	uint32_t SectorError;
+	uint32_t y = 0;
+	uint32_t FlashPackages = FW_MAX_SIZE / 32;
+
+	uint32_t FlashAddress = MAIN_FW_ADDRESS;
+
+	erase.TypeErase = FLASH_TYPEERASE_SECTORS;
+	erase.Sector = FLASH_SECTOR_1;
+	erase.NbSectors = 7;
+	erase.Banks = FLASH_BANK_1;
+	erase.VoltageRange = FLASH_VOLTAGE_RANGE_1;
+
+	HAL_FLASH_Unlock();
+
+	HAL_FLASHEx_Erase(&erase, &SectorError);
+
+	while(y < FlashPackages)
+	{
+	      // bufor 32 bajtów
+	    memcpy(data_to_write, (uint8_t *)(OCTOSPI1_BASE + SECTOR_SIZE + y * 32), 32);
+
+	    // Programowanie FlashWord wymaga wskaźnika do bufora 32-bajtowego
+	    HAL_FLASH_Program(FLASH_TYPEPROGRAM_FLASHWORD, FlashAddress, data_to_write);
+
+	    FlashAddress += 32;  // zwiększamy o 32 bajty, żeby zachować wyrównanie
+	    y++;
+	}
+	HAL_FLASH_Lock();
+
+	DeviceSettings.NewFWAvailable = 0;
+	DeviceSettings.NewFWSize = 0;
+
+	Memory_SaveSettings();
+
+}
+
+uint8_t ReadSettings(void)
+{
+	uint8_t settings_valid = *(volatile const uint8_t *)(OCTOSPI1_BASE);
+	if(settings_valid != 0xDE)
+	{
+		sprintf(DeviceSettings.Channel1_Name,"Channel 1");
+		sprintf(DeviceSettings.Channel2_Name,"Channel 2");
+		sprintf(DeviceSettings.Channel3_Name,"Channel 3");
+		sprintf(DeviceSettings.Channel4_Name,"Channel 4");
+		sprintf(DeviceSettings.Channel5_Name,"Channel 5");
+		sprintf(DeviceSettings.Channel6_Name,"Channel 6");
+		sprintf(DeviceSettings.Channel7_Name,"Channel 7");
+		sprintf(DeviceSettings.Channel8_Name,"Channel 8");
+		sprintf(DeviceSettings.Channel9_Name,"Channel 9");
+		sprintf(DeviceSettings.Channel10_Name,"Channel 10");
+		sprintf(DeviceSettings.Channel11_Name,"Channel 11");
+		sprintf(DeviceSettings.Channel12_Name,"Channel 12");
+		sprintf(DeviceSettings.Channel13_Name,"Channel 13");
+		sprintf(DeviceSettings.Channel14_Name,"Channel 14");
+		sprintf(DeviceSettings.Channel15_Name,"Channel 15");
+		sprintf(DeviceSettings.Channel16_Name,"Channel 16");
+
+		for(uint8_t i = 0; i < 16; i++)
+		{
+			DeviceSettings.PhaseAssignment[i] = i % 3;
+			DeviceSettings.ActiveEnergy[i] = 0;
+			DeviceSettings.ReactiveEnergy[i] = 0;
+		}
+
+		DeviceSettings.TotalActiveEnergy = 0;
+		DeviceSettings.TotalReactiveEnergy = 0;
+
+		DeviceSettings.DHCP_Enable = 0;
+
+		DeviceSettings.StaticIP[0] = 192;
+		DeviceSettings.StaticIP[1] = 168;
+		DeviceSettings.StaticIP[2] = 1;
+		DeviceSettings.StaticIP[3] = 11;
+
+		DeviceSettings.StaticMask[0] = 255;
+		DeviceSettings.StaticMask[1] = 255;
+		DeviceSettings.StaticMask[2] = 255;
+		DeviceSettings.StaticMask[3] = 0;
+
+		DeviceSettings.StaticGateway[0] = 192;
+		DeviceSettings.StaticGateway[1] = 168;
+		DeviceSettings.StaticGateway[2] = 1;
+		DeviceSettings.StaticGateway[3] = 1;
+
+		DeviceSettings.NewFWAvailable = 0;
+		DeviceSettings.NewFWSize = 0;
+
+		Memory_SaveSettings();
+		//Memory_SaveWiFiCredentials("Test", "Test2");
+	}
+	else
+	{
+		memcpy(&DeviceSettings, (__IO uint8_t *)OCTOSPI1_BASE + 0x1, sizeof(DeviceSettings));
+	}
 }
 /* USER CODE END 4 */
 

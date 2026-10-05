@@ -21,7 +21,7 @@
 #define READ_STATUS_REG_CMD        	0x05
 #define WRITE_CFG_REG_2_CMD         0x01
 #define WRITE_ENABLE_CMD            0x06
-#define SECTOR_ERASE_CMD      		0xDC
+#define SECTOR_ERASE_CMD      		0x20
 #define PAGE_PROG_CMD        	    0x38
 #define IO_READ_CMD         	    0x6B
 #define READ_STATUS_REG_CMD 	    0x05
@@ -41,18 +41,36 @@
 #define CONFIG_REG2_ADDR3                0x300
 #define CR2_DUMMY_CYCLES_66MHZ           0x07
 
-#define SECTOR_SIZE						 0x40000  // 256KB
+#define SECTOR_SIZE						 0x1000  // 256KB
 #define MEMORY_SIZE					     0x20000000 // 64MB
 #define SECTOR_COUNT					 MEMORY_SIZE / SECTOR_SIZE // 2048 sectors
 
+#define S25FL512S_FLASH_SIZE                            0x4000000 /* 512 MBits => 64MBytes */
+#define S25FL512S_SECTOR_SIZE                           0x1000   /* 256 sectors of 256KBytes */
+#define S25FL512S_PAGE_SIZE                             0x100     /* 131072 pages of 512 bytes */
+
+#define SETTINGS_SECTOR_ADDR	0
+
+#define FW_START_ADDR 0x40000
+#define FW_MAX_SIZE   (0x40000 * 4)
+#define CHUNK_SIZE    1024
+
+#define DAY_LOG_SECTOR_ADDR S25FL512S_SECTOR_SIZE * 6 * 64
+#define DAY_LOG_SECTOR_COUNT	2 * 64
+
+#define MONTH_LOG_SECTOR_ADDR S25FL512S_SECTOR_SIZE * 8 * 64
+#define MONTH_LOG_SECTOR_COUNT	24 * 64
+
 #define PARAMTERS_SECTOR_NO				 0
-#define PARAMTERS_SECTORS_COUNT		     1
+#define PARAMTERS_SECTORS_COUNT		     1 * 64
 
-#define WEBGUI_SECTOR_NO				 1
-#define WEBGUI_SECTOR_COUNT			     8
+#define WEBGUI_SECTOR_NO				 1 * 64
+#define WEBGUI_SECTOR_COUNT			     8 * 64
 
-#define LOGS_SECTOR_NO				     9
+#define LOGS_SECTOR_NO				     9 * 64
 #define LOGS_SECTOR_COUNT				 SECTOR_COUNT - WEBGUI_SECTOR_COUNT - PARAMTERS_SECTORS_COUNT
+
+#define LOG_SIZE						132
 
 /* Exported macro ------------------------------------------------------*/
 #define COUNTOF(__BUFFER__) (sizeof(__BUFFER__)/sizeof(*(__BUFFER__)))
@@ -67,8 +85,15 @@ void AutoPollingWIP(void);
 void PollingWEL(void);
 void PollingWIP(void);
 void EnableMemMapped(void);
+void Memory_SaveSettings(void);
+void Memory_ClearCurrentFW(void);
+void SaveSettingFlagSet(void);
+void SaveLogFlagSet(void);
+void Memory_SaveFW(uint8_t *data, uint32_t length, uint32_t address);
 
 uint8_t Memory_SaveWiFiCredentials(const char *ssid, const char *password);
 uint8_t Memory_ReadWiFiCredentials(uint8_t *ssid, uint8_t *password);
+void MemoryMemHandler(void);
+
 
 #endif /* INC_MEMMANAGER_H_ */

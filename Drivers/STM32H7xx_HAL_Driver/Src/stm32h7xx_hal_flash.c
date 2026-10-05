@@ -160,7 +160,7 @@ HAL_StatusTypeDef HAL_FLASH_Program(uint32_t TypeProgram, uint32_t FlashAddress,
   uint8_t row_index = FLASH_NB_32BITWORD_IN_FLASHWORD;
 
   /* Check the parameters */
-  assert_param(IS_FLASH_TYPEPROGRAM(TypeProgram));
+  assert_param(IS_FLASH_TYPEPR2OGRAM(TypeProgram));
   assert_param(IS_FLASH_PROGRAM_ADDRESS(FlashAddress));
 
   /* Process Locked */

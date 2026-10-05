@@ -6,8 +6,12 @@
  */
 
 #include "MemManager.h"
-
 extern OSPI_HandleTypeDef hospi1;
+
+extern Settings_t DeviceSettings;
+uint8_t SaveSettingFlag = 0;
+uint8_t SaveLogFlag = 0;
+
 
 void WriteEnable(void)
 {
@@ -263,7 +267,7 @@ void SectorErase(uint32_t Sector)
 	sCommand.AddressDtrMode = HAL_OSPI_ADDRESS_DTR_DISABLE;
 	sCommand.AddressMode = HAL_OSPI_ADDRESS_1_LINE;
 	sCommand.AddressSize = HAL_OSPI_ADDRESS_32_BITS;
-	sCommand.Address = Sector * 0x40000;
+	sCommand.Address = Sector;// * 0x40000;
 
 	/* Send Octal Sector erase cmd */
 	if (HAL_OSPI_Command(&hospi1, &sCommand, HAL_OSPI_TIMEOUT_DEFAULT_VALUE) != HAL_OK)
@@ -289,7 +293,7 @@ void DTR_MemoryWrite(uint8_t * Buffer, uint32_t Size, uint32_t Address)
 	sCommand.DataMode = HAL_OSPI_DATA_1_LINE;
 	sCommand.NbData = Size;
 	sCommand.DummyCycles = 0;
-	sCommand.SIOOMode = HAL_OSPI_SIOO_INST_EVERY_CMD;
+	sCommand.SIOOMode = HAL_OSPI_SIOO_INST_ONLY_FIRST_CMD;
 	sCommand.InstructionDtrMode = HAL_OSPI_INSTRUCTION_DTR_DISABLE;
 	sCommand.AddressDtrMode = HAL_OSPI_ADDRESS_DTR_DISABLE;
 	sCommand.DataDtrMode = HAL_OSPI_DATA_DTR_DISABLE;
@@ -317,10 +321,10 @@ void EnableMemMapped(void)
 	sCommand.AddressMode = HAL_OSPI_ADDRESS_1_LINE;
 	sCommand.AddressSize = HAL_OSPI_ADDRESS_32_BITS;
 	sCommand.AlternateBytesMode = HAL_OSPI_ALTERNATE_BYTES_NONE;
-	sCommand.DataMode = HAL_OSPI_DATA_4_LINES;
-	sCommand.DummyCycles = 8;
+	sCommand.DataMode = HAL_OSPI_DATA_1_LINE;
+	sCommand.DummyCycles = 0;
 	sCommand.SIOOMode = HAL_OSPI_SIOO_INST_EVERY_CMD;
-	sCommand.Instruction = IO_READ_CMD;
+	sCommand.Instruction = 0x13;
 	sCommand.InstructionDtrMode = HAL_OSPI_INSTRUCTION_DTR_DISABLE;
 	sCommand.AddressDtrMode = HAL_OSPI_ADDRESS_DTR_DISABLE;
 	sCommand.DataDtrMode = HAL_OSPI_DATA_DTR_DISABLE;
@@ -392,21 +396,63 @@ uint8_t Memory_SaveWiFiCredentials(const char *ssid, const char *password)
     return HAL_OK;
 }
 
-uint8_t Memory_ReadWiFiCredentials(uint8_t *ssid, uint8_t *password)
+void Memory_SaveSettings(void)
 {
-	uint8_t CreditialsExists = *(volatile const uint8_t *)(OCTOSPI1_BASE + 0x10);
-    if (CreditialsExists != 1)
-    	return 0; // brak danych
+	uint8_t SettingsBuffer[1024];
+	uint32_t addr = 0x00UL;
 
-    uint8_t ssid_len = *(volatile const uint8_t *)(OCTOSPI1_BASE + 0x10 + 1);
-    uint8_t pass_len = *(volatile const uint8_t *)(OCTOSPI1_BASE + 0x10 + 2);
+	SettingsBuffer[0] = 0xDE;
+	memcpy(SettingsBuffer + 1, &DeviceSettings, sizeof(DeviceSettings));
 
-    volatile const uint8_t *ssid_ptr = (volatile const uint8_t *)(OCTOSPI1_BASE + 0x13);
-    memcpy(ssid, (const uint8_t *)ssid_ptr, ssid_len);
-    ssid[ssid_len] = '\0';
-    volatile const uint8_t *password_ptr = (volatile const uint8_t *)(OCTOSPI1_BASE + 0x13 + ssid_len);
-    memcpy(password, (const uint8_t *)password_ptr, pass_len);
-    password[pass_len] = '\0';
+    HAL_OSPI_Abort(&hospi1);
 
-    return 1;
+    DTR_MemoryCfg();
+    WriteEnable();
+    PollingWEL();
+    SectorErase(0);
+    PollingWIP();
+
+    for(uint8_t i = 0; i < sizeof(SettingsBuffer) / 512; i++)
+    {
+        WriteEnable();
+        PollingWEL();
+        DTR_MemoryWrite(SettingsBuffer + i*512, 512, addr  + i*512);
+        PollingWIP();
+    }
+
+
+    EnableMemMapped();
 }
+
+void Memory_ClearCurrentFW(void)
+{
+	HAL_OSPI_Abort(&hospi1);
+	DTR_MemoryCfg();
+	for(uint8_t i = 0; i < 4; i++)
+	{
+
+	    WriteEnable();
+	    PollingWEL();
+	    SectorErase(i + 1 + SECTOR_SIZE);
+	    PollingWIP();
+	}
+	EnableMemMapped();
+}
+
+void Memory_SaveFW(uint8_t *data, uint32_t length, uint32_t address)
+{
+	HAL_OSPI_Abort(&hospi1);
+	DTR_MemoryCfg();
+
+    for(uint8_t i = 0; i <= length / 512; i++)
+    {
+        WriteEnable();
+        PollingWEL();
+        DTR_MemoryWrite(data + i*512, 512, address  + i*512);
+        PollingWIP();
+    }
+    EnableMemMapped();
+}
+
+
+
